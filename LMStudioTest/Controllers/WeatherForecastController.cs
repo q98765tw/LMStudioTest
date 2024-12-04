@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using System.Text.Json;
 using System.Text;
 using System.Net.Http;
+using LMStudioTest.Services;
 
 namespace LMStudioTest.Controllers
 {
@@ -9,130 +10,78 @@ namespace LMStudioTest.Controllers
     [Route("[controller]")]
     public class WeatherForecastController : ControllerBase
     {
-        private static readonly string[] Summaries = new[]
-        {
-            "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-        };
-
         private readonly ILogger<WeatherForecastController> _logger;
         private readonly HttpClient _httpClient;
+
+        private readonly WeatherForecastService _weatherForecastService;
         public WeatherForecastController(
             ILogger<WeatherForecastController> logger,
-            IHttpClientFactory httpClientFactory)
+            IHttpClientFactory httpClientFactory,
+            WeatherForecastService weatherForecastService)
         {
             _logger = logger;
             _httpClient = httpClientFactory.CreateClient();
+            _weatherForecastService = weatherForecastService;
         }
 
-        [HttpGet(Name = "GetWeatherForecast")]
-        public IEnumerable<WeatherForecast> Get()
-        {
-            return Enumerable.Range(1, 5).Select(index => new WeatherForecast
-            {
-                Date = DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
-                TemperatureC = Random.Shared.Next(-20, 55),
-                Summary = Summaries[Random.Shared.Next(Summaries.Length)]
-            })
-            .ToArray();
-        }
         [HttpGet("get-models")]
         public async Task<IActionResult> GetModels()
         {
-            string baseUrl = "http://localhost:1234/v1/models";
-            string apiKey = "lm-studio";
+            // 呼叫服務層的 GetModels 方法
+            var result = await _weatherForecastService.GetModelsAsync();
 
-            try
+            if (result.IsSuccess)
             {
-                // 設定 API 金鑰（如果需要）
-                _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
-
-                // 發送 GET 請求到 LM Studio
-                var response = await _httpClient.GetAsync(baseUrl);
-
-                if (response.IsSuccessStatusCode)
-                {
-                    var responseBody = await response.Content.ReadAsStringAsync();
-                    var jsonResponse = JsonSerializer.Deserialize<JsonElement>(responseBody);
-
-                    // 返回 JSON 給前端
-                    return Ok(jsonResponse);
-                }
-                else
-                {
-                    return StatusCode((int)response.StatusCode, new
-                    {
-                        error = response.ReasonPhrase
-                    });
-                }
+                // 返回成功結果
+                return Ok(result.Data);
             }
-            catch (HttpRequestException ex)
+            else
             {
+                // 返回錯誤結果
                 return StatusCode(500, new
                 {
                     error = "Error connecting to LM Studio",
-                    details = ex.Message
+                    details = result.ErrorMessage
                 });
             }
         }
-        [HttpPost("PostTest")]
-        public async Task<IActionResult> PostTest(IFormFile file)
+
+        [HttpPost("userRequest")]
+        public async Task<IActionResult> userRequest(string userInput)
         {
-            // API 基本設定
-            string baseUrl = "http://localhost:1234/v1/chat/completions";
-            string apiKey = "lm-studio";
+            var result = await _weatherForecastService.PostTestAsync(userInput);
 
-            try
+            if (result.IsSuccess)
             {
-                // 設定 API 金鑰
-                _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
-
-                // 建立請求的內容
-                var requestBody = new
-                {
-                    model = "model-identifier",
-                    messages = new[]
-                    {
-                        new { role = "system", content = "Use Traditional Chinese." },
-                        new { role = "user", content = "Introduce yourself." }
-                    },
-                    temperature = 0.7
-                };
-
-                // 將物件序列化為 JSON
-                var jsonContent = JsonSerializer.Serialize(requestBody);
-                var httpContent = new StringContent(jsonContent, Encoding.UTF8, "application/json");
-
-                // 發送 POST 請求
-                var response = await _httpClient.PostAsync(baseUrl, httpContent);
-
-                // 處理回應
-                if (response.IsSuccessStatusCode)
-                {
-                    var responseBody = await response.Content.ReadAsStringAsync();
-                    var jsonResponse = JsonSerializer.Deserialize<JsonElement>(responseBody);
-
-                    return Ok(jsonResponse); // 返回完整的 JSON 給調用方
-                }
-                else
-                {
-                    return StatusCode((int)response.StatusCode, new
-                    {
-                        error = "Failed to fetch data from LM Studio",
-                        details = response.ReasonPhrase
-                    });
-                }
+                return Ok(result.Data); // 返回成功的 JSON 資料
             }
-            catch (Exception ex)
+            else
             {
-                // 捕獲例外並返回
                 return StatusCode(500, new
                 {
-                    error = "An unexpected error occurred",
-                    details = ex.Message
-                });
+                    error = "Failed to fetch data from LM Studio",
+                    details = result.ErrorMessage
+                }); // 返回錯誤訊息
             }
         }
+        [HttpPost("changeSetting")]
+        public async Task<IActionResult> changeSetting(IFormFile file)
+        {
 
+            int result = await _weatherForecastService.changeSetting(file);
+
+            if (result > 0)
+            {
+                return Ok(result); // 返回成功的 JSON 資料
+            }
+            else
+            {
+                return StatusCode(500, new
+                {
+                    error = "Failed to fetch data from LM Studio",
+                }); // 返回錯誤訊息
+            }
+        }
 
     }
 }
