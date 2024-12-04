@@ -11,25 +11,30 @@ namespace LMStudioTest.Services
         private readonly ILogger<WeatherForecastService> _logger;
         private readonly HttpClient _httpClient;
         private readonly IMemoryCache _memoryCache;  //cache 儲存對話歷史
-
+        private readonly string _apiKey;
+        private readonly string _base;
+        private readonly IConfiguration _configuration;
         public WeatherForecastService(
-            ILogger<WeatherForecastService> logger,
+             ILogger<WeatherForecastService> logger,
              IHttpClientFactory httpClientFactory,
-             IMemoryCache memoryCache)
+             IMemoryCache memoryCache,
+             IConfiguration configuration)
         {
             _logger = logger;
             _httpClient = httpClientFactory.CreateClient();
             _memoryCache = memoryCache;
+            _apiKey = configuration["LMStudio:ApiKey"];
+            _base = configuration["LMStudio:BaseUrl"];
+            _configuration = configuration;
         }
 
         public async Task<(bool IsSuccess, JsonElement? Data, string? ErrorMessage)> GetModelsAsync()
         {
-            string baseUrl = "http://localhost:1234/v1/models";
-            string apiKey = "lm-studio";
+            string baseUrl = _base + _configuration["LMStudio:ModelList"];
 
             try
             {
-                _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
+                _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {_apiKey}");
 
                 var response = await _httpClient.GetAsync(baseUrl);
 
@@ -52,8 +57,7 @@ namespace LMStudioTest.Services
 
         public async Task<(bool IsSuccess, JsonElement? Data, string? ErrorMessage)> PostTestAsync(string input)
         {
-            string baseUrl = "http://localhost:1234/v1/chat/completions";
-            string apiKey = "lm-studio";
+            string baseUrl = _base + _configuration["LMStudio:Chat"];
             string conversationHistoryKey = "conversationHistoryKey"; // 每個用戶應該有不同的鍵
 
             if (string.IsNullOrEmpty(input)) 
@@ -72,7 +76,7 @@ namespace LMStudioTest.Services
             {
                 // 設定 API 金鑰
                 _httpClient.DefaultRequestHeaders.Clear();
-                _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
+                _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {_apiKey}");
 
                 // 將 user 訊息加入對話歷史 string 插入
                 var userMessage = new { role = "user", content = input };
@@ -81,7 +85,7 @@ namespace LMStudioTest.Services
                 // 將歷史對話作為請求的一部分
                 var requestBody = new
                 {
-                    model = "llama-3.2-1b-instruct",  // 使用正確的模型識別碼
+                    model = _configuration["LMStudio:Model"],  // 使用正確的模型識別碼
                     messages = conversationHistory,  // 將整個對話歷史傳遞給模型
                     temperature = 0.7
                 };
@@ -101,18 +105,14 @@ namespace LMStudioTest.Services
                     if (jsonResponse.TryGetProperty("choices", out var choices))
                     {
                         resContent = choices[0].GetProperty("message").GetProperty("content").GetString();
-                        Console.WriteLine($"Content: {resContent}");
                     }
-                    else
-                    {
-                        Console.WriteLine("無法找到 content");
-                    }
+                    
                     // 儲存模型回應並記錄到對話中
                     var assistantMessage = new { role = "assistant", content = resContent };
                     conversationHistory.Add(assistantMessage);  // 記錄助手的回應
 
                     // 將更新後的對話歷史寫回記憶體緩存
-                    _memoryCache.Set(conversationHistoryKey, conversationHistory, TimeSpan.FromMinutes(1));
+                    _memoryCache.Set(conversationHistoryKey, conversationHistory, TimeSpan.FromMinutes(5));
                     return (true, jsonResponse, null);
                 }
                 else
@@ -125,7 +125,7 @@ namespace LMStudioTest.Services
                 return (false, null, ex.Message);
             }
         }
-        public async Task<bool> checkfile(IFormFile file)
+        public bool checkfile(IFormFile file)
         {
             // 檢查是否有檔案上傳
             if (file == null || file.Length == 0)
@@ -147,7 +147,7 @@ namespace LMStudioTest.Services
         {
             string conversationHistoryKey = "conversationHistoryKey"; // 每個用戶應該有不同的鍵
 
-            if (!await checkfile(file))
+            if (!checkfile(file))
             {
                 return 0;
             }
@@ -161,7 +161,7 @@ namespace LMStudioTest.Services
                     systemContent = await reader.ReadToEndAsync();
                 }
             }
-            catch (Exception ex)
+            catch 
             {
                 return 0;
             }
@@ -180,7 +180,7 @@ namespace LMStudioTest.Services
             conversationHistory.Insert(0, systemMessage);  // 頭部插入，保證系統訊息在前
 
             // 將更新後的對話歷史寫回記憶體緩存
-            _memoryCache.Set(conversationHistoryKey, conversationHistory, TimeSpan.FromMinutes(1));
+            _memoryCache.Set(conversationHistoryKey, conversationHistory, TimeSpan.FromMinutes(5));
             return conversationHistory.Count();
         }
     }

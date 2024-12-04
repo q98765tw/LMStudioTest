@@ -2,6 +2,8 @@ using LMStudioTest.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// 設置 Configuration
+var configuration = builder.Configuration;
 // Add services to the container.
 builder.Services.AddScoped<WeatherForecastService>();
 builder.Services.AddControllers();
@@ -11,6 +13,8 @@ builder.Services.AddSwaggerGen();
 // 確保添加 HttpClient 支援
 builder.Services.AddHttpClient();
 builder.Services.AddMemoryCache();
+// 如果有其他依賴於 IConfiguration 的服務
+builder.Services.AddSingleton<IConfiguration>(configuration);
 
 var app = builder.Build();
 
