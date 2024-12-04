@@ -1,0 +1,6 @@
+@LMStudioTest_HostAddress = http://localhost:5189
+
+GET {{LMStudioTest_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
